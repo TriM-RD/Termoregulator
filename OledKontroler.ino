@@ -436,9 +436,13 @@ void demo(){
     byte h = humDHT+10;
     byte tH = tempDHT+10;
     byte tL = tempDHT-10;
+    Serial.println(tH);
     EEPROM.write(maxtempaddr, tH);
     EEPROM.write(mintempaddr, tL);
     EEPROM.write(maxhumaddr, h);
+    maxtemp = EEPROM.read(maxtempaddr);
+    mintemp = EEPROM.read(mintempaddr);
+    maxhum = EEPROM.read(maxhumaddr);
     oled.clearDisplay();              // Clear screen
     oled.drawBitmap(nothing, 1024);
     delay(500);
@@ -767,14 +771,15 @@ int processData()
     Serial.print(" T: ");
     Serial.print(t);
     Serial.println("C");
-    /*if(sendData){
+    if(sendData){
       String tempStr = String("coming from arduino: ")+String("H= ")+String(h)+String("T= ")+String(t)+String(poruka)+String(poruka2);
       espSerial.println(tempStr);
       Wire.beginTransmission(0);
       Wire.println(tempStr);  
       Wire.endTransmission();
       imgToShow = 3;
-    }*/
+      sendData = false;
+    }
     
     return imgToShow;
  }
@@ -851,9 +856,11 @@ void readSensor()
   tempDHT = rawTemperature >> 8;
 }
 
-void receiveEvent()
+void receiveEvent(int howMany)
 {
+  int x = Wire.read();       // recibe el último byte como número
   sendData = true;
+  Serial.println("YES SIR");         // imprime el número
 }
 
  
