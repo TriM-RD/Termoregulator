@@ -6,8 +6,7 @@
 #include <ACROBOTIC_SSD1306.h>
 #include <EEPROM.h>
 #include <SPI.h>
-#include <SoftwareSerial.h>
-#define DHT11Pin 10
+#define DHT11Pin 2
 DHT dht;
 int counter = 0;
 bool sendData = false;
@@ -18,7 +17,7 @@ const int buttonRightPin = A3;
 float returnVoltage = 0.0;
 int MenuState = 0;
 
-SoftwareSerial espSerial(5, 6);
+//SoftwareSerial espSerial(5, 6);
 //DHT dht(DHTPIN, DHTTYPE);
 byte tempDHT = 0;
 byte humDHT = 0;
@@ -368,6 +367,7 @@ static const unsigned char PROGMEM sendingDue[] = {
 
 
 byte y = 0;
+bool statusChanged = true;
 void setup()
 {
   pinMode(buttonOkPin, INPUT);
@@ -375,7 +375,7 @@ void setup()
   pinMode(buttonRightPin, INPUT);
 
   Serial.begin(9600);
-  espSerial.begin(9600);
+  //espSerial.begin(9600);
   dht.setup(DHT11Pin);
   Wire.begin(1);  
   Wire.onReceive(receiveEvent);
@@ -684,36 +684,45 @@ void drawSending(void)
     oled.drawBitmap(sendingUno, 1024);
 }
 
+void getDht11Inputs(){
+    /*readSensor(); 
+    if((payload[4] - tempDHT >= 3 || payload[4] - tempDHT <= -3 || payload[5] - humDHT >= 5 || payload[5] - humDHT <= -5) && humDHT != 0){
+      statusChanged = true;
+      payload[4] = tempDHT;
+      payload[5] = humDHT;  
+    }*/
+    //debugln(tempDHT);
+}
+
 int processData()
 {
+  Serial.println(String("VentStatus: ")+String(digitalRead(ventilator)));
     readSensor();
-    float h = humDHT;
-    float t = tempDHT;
-    //float h = 0;
-    //float t = 0;
+    bool heaterStatus = digitalRead(grijac);
+    bool ventStatus = digitalRead(ventilator);
     String poruka, poruka2 = "";
     String str = "";
     bool vlaga = false;
     int imgToShow = 0;
-    poruka2 = "H:" + String(h) + "%   T:" + String(t) + "C";
-    if (isnan(h) || isnan(t))
+    poruka2 = "H:" + String(humDHT) + "%   T:" + String(tempDHT) + "C";
+    if (isnan(humDHT) || isnan(tempDHT))
     {
         poruka2 = "DHT error!";
     }
-    if (h < 80)
+    if (humDHT < 80)
     {
         poruka = " Dry, OK !";
     }
-    if (h >= 80 && h < 100)
+    if (humDHT >= 80 && humDHT < 100)
     {
         poruka = "Moisture !";
     }
-    if (h >= 100)
+    if (humDHT >= 100)
     {
         poruka = " ! WATER !";
     }
     
-    if (h > maxhum)//Provjeriti što se dešava u ovom slučaju
+    /*if (humDHT > maxhum)//Provjeriti što se dešava u ovom slučaju
     {
         digitalWrite(grijac, HIGH);
         Serial.println("HEATON");
@@ -723,15 +732,15 @@ int processData()
         //drawHeaterOn();
         //drawCoolerOn();
         vlaga = true;
-    }
+    }*/
 
-    if (h <= maxhum)
+    if (humDHT <= maxhum)
     {
       vlaga = false;
     }
 
 
-    if (t < mintemp &&  vlaga == false)
+    if (tempDHT < mintemp &&  vlaga == false)
     {
         imgToShow = 1;
         if (digitalRead(grijac)==0)
@@ -740,7 +749,7 @@ int processData()
           Serial.println("HEATON");
         }
     }
-    if (t >= mintemp &&  vlaga == false)
+    if (tempDHT >= mintemp &&  vlaga == false)
     {
       imgToShow = 0;
       if (digitalRead(grijac) == 1)
@@ -749,7 +758,7 @@ int processData()
           Serial.println("HEATOFF");  
       }
     }
-    if (t > maxtemp && vlaga == false)
+    if (tempDHT > maxtemp && vlaga == false)
     {
         imgToShow = 2;
         if (digitalRead(ventilator)==0){
@@ -757,7 +766,7 @@ int processData()
           Serial.println("VENTON");
         }
     }
-    if (t <= maxtemp && vlaga == false)
+    if (tempDHT <= maxtemp && vlaga == false)
     {
       imgToShow = 0;
         if (digitalRead(ventilator)==1){
@@ -766,14 +775,15 @@ int processData()
         }
     }
     Serial.print("H: ");
-    Serial.print(h);
+    Serial.print(humDHT);
     Serial.print("% ");
     Serial.print(" T: ");
-    Serial.print(t);
+    Serial.print(tempDHT);
     Serial.println("C");
-    if(sendData){
-      String tempStr = String("coming from arduino: ")+String("H= ")+String(h)+String("T= ")+String(t)+String(poruka)+String(poruka2);
-      espSerial.println(tempStr);
+    Serial.println(String("VentStatus: ")+String(digitalRead(ventilator)));
+    if(sendData || heaterStatus != digitalRead(grijac) || ventStatus != digitalRead(ventilator)){
+      String tempStr = String("coming from arduino: ")+String("H= ")+String(humDHT)+String("T= ")+String(tempDHT)+String(poruka)+String(poruka2);
+      //espSerial.println(tempStr);
       Wire.beginTransmission(0);
       Wire.println(tempStr);  
       Wire.endTransmission();
