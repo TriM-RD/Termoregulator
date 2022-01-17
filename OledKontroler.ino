@@ -31,8 +31,8 @@ byte maxtemp = EEPROM.read(maxtempaddr);
 byte mintemp = EEPROM.read(mintempaddr);
 byte maxhum = EEPROM.read(maxhumaddr);
 
-int grijac = 5;
-int ventilator = 6;
+int heater = 5;
+int vent = 6;
 
 static const unsigned char PROGMEM heater_on[] =
     {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -373,6 +373,8 @@ void setup()
   pinMode(buttonOkPin, INPUT);
   pinMode(buttonLeftPin, INPUT);
   pinMode(buttonRightPin, INPUT);
+  pinMode(heater, OUTPUT);
+  pinMode(vent, OUTPUT);
 
   Serial.begin(9600);
   //espSerial.begin(9600);
@@ -696,10 +698,10 @@ void getDht11Inputs(){
 
 int processData()
 {
-  Serial.println(String("VentStatus: ")+String(digitalRead(ventilator)));
+  Serial.println(String("VentStatus: ")+String(digitalRead(vent)));
     readSensor();
-    bool heaterStatus = digitalRead(grijac);
-    bool ventStatus = digitalRead(ventilator);
+    bool heaterStatus = digitalRead(heater);
+    bool ventStatus = digitalRead(vent);
     String poruka, poruka2 = "";
     String str = "";
     bool vlaga = false;
@@ -743,34 +745,34 @@ int processData()
     if (tempDHT < mintemp &&  vlaga == false)
     {
         imgToShow = 1;
-        if (digitalRead(grijac)==0)
+        if (digitalRead(heater)==0)
         {
-          digitalWrite(grijac, HIGH);
+          digitalWrite(heater, HIGH);
           Serial.println("HEATON");
         }
     }
     if (tempDHT >= mintemp &&  vlaga == false)
     {
       imgToShow = 0;
-      if (digitalRead(grijac) == 1)
+      if (digitalRead(heater) == 1)
       {
-          digitalWrite(grijac, LOW);
+          digitalWrite(heater, LOW);
           Serial.println("HEATOFF");  
       }
     }
     if (tempDHT > maxtemp && vlaga == false)
     {
         imgToShow = 2;
-        if (digitalRead(ventilator)==0){
-          digitalWrite(ventilator,HIGH);  
+        if (digitalRead(vent)==0){
+          digitalWrite(vent,HIGH);  
           Serial.println("VENTON");
         }
     }
     if (tempDHT <= maxtemp && vlaga == false)
     {
       imgToShow = 0;
-        if (digitalRead(ventilator)==1){
-        digitalWrite(ventilator,LOW);  
+        if (digitalRead(vent)==1){
+        digitalWrite(vent,LOW);  
         Serial.println("VENTOFF");
         }
     }
@@ -780,8 +782,8 @@ int processData()
     Serial.print(" T: ");
     Serial.print(tempDHT);
     Serial.println("C");
-    Serial.println(String("VentStatus: ")+String(digitalRead(ventilator)));
-    if(sendData || heaterStatus != digitalRead(grijac) || ventStatus != digitalRead(ventilator)){
+    Serial.println(String("VentStatus: ")+String(digitalRead(vent)));
+    if(sendData || heaterStatus != digitalRead(heater) || ventStatus != digitalRead(vent)){
       String tempStr = String("coming from arduino: ")+String("H= ")+String(humDHT)+String("T= ")+String(tempDHT)+String(poruka)+String(poruka2);
       //espSerial.println(tempStr);
       Wire.beginTransmission(0);
