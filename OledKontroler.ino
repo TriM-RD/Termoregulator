@@ -457,6 +457,8 @@ void demo(){
     oled.clearDisplay();
     oled.drawBitmap(sendingUno, 1024);
     delay(500);
+    sendData = true;
+    delay(500);
     processData();
 }
 
@@ -686,16 +688,6 @@ void drawSending(void)
     oled.drawBitmap(sendingUno, 1024);
 }
 
-void getDht11Inputs(){
-    /*readSensor(); 
-    if((payload[4] - tempDHT >= 3 || payload[4] - tempDHT <= -3 || payload[5] - humDHT >= 5 || payload[5] - humDHT <= -5) && humDHT != 0){
-      statusChanged = true;
-      payload[4] = tempDHT;
-      payload[5] = humDHT;  
-    }*/
-    //debugln(tempDHT);
-}
-
 int processData()
 {
   Serial.println(String("VentStatus: ")+String(digitalRead(vent)));
@@ -784,10 +776,13 @@ int processData()
     Serial.println("C");
     Serial.println(String("VentStatus: ")+String(digitalRead(vent)));
     if(sendData || heaterStatus != digitalRead(heater) || ventStatus != digitalRead(vent)){
-      String tempStr = String("coming from arduino: ")+String("H= ")+String(humDHT)+String("T= ")+String(tempDHT)+String(poruka)+String(poruka2);
+      //String tempStr = String("coming from arduino: ")+String("H= ")+String(humDHT)+String("T= ")+String(tempDHT)+String(poruka)+String(poruka2);
+      byte toSend[6] = {digitalRead(heater), digitalRead(vent), vlaga, tempDHT, humDHT, sendData};
       //espSerial.println(tempStr);
       Wire.beginTransmission(0);
-      Wire.println(tempStr);  
+      for(int i = 0; i < 6;i++){
+        Wire.write(toSend[i]);
+      }
       Wire.endTransmission();
       imgToShow = 3;
       sendData = false;
