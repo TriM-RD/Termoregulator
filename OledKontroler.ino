@@ -22,29 +22,31 @@ DHT dht;
 int counter = 0;
 bool sendData = false;
 bool onBattery = false;
-const int buttonOkPin = A2; 
-const int buttonLeftPin = A1; 
-const int buttonRightPin = A3; 
+const byte PROGMEM buttonOkPin = A2; 
+const byte PROGMEM buttonLeftPin = A1; 
+const byte PROGMEM buttonRightPin = A3; 
 
 int MenuState = 0;
 
 byte tempDHT = 0;
 byte humDHT = 0;
-int maxtempaddr = 0;
-int mintempaddr = 1;
-int maxhumaddr = 2;
-int buttonState = 0;
+const byte PROGMEM maxtempaddr = 0;
+const byte PROGMEM mintempaddr = 1;
+const byte PROGMEM maxhumaddr = 2;
+const byte PROGMEM setByAmountAddr = 3;
+byte buttonState = 0;
 char cstr[16];
 
 byte maxtemp = EEPROM.read(maxtempaddr);
 byte mintemp = EEPROM.read(mintempaddr);
 byte maxhum = EEPROM.read(maxhumaddr);
+byte setByAmount = EEPROM.read(setByAmountAddr);
 
-int heaterSwitch = 4;
-int ventSwitch = 3;
-int heater = 6;
-int vent = 5;
-int poplava = A0;
+const byte PROGMEM heaterSwitch = 4;
+const byte PROGMEM ventSwitch = 3;
+const byte PROGMEM heater = 6;
+const byte PROGMEM vent = 5;
+const byte PROGMEM poplava = A0;
 
 static const unsigned char PROGMEM heater_on[] =
     {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -586,9 +588,10 @@ void standBy(){
 
 void demo(){
     readSensor();
-    byte h = humDHT+10;
-    byte tH = tempDHT+10;
-    byte tL = tempDHT-10;
+    setByAmount = EEPROM.read(setByAmountAddr);
+    byte h = humDHT+setByAmount;
+    byte tH = tempDHT+setByAmount;
+    byte tL = tempDHT-setByAmount;
     debugln(tH);
     EEPROM.write(maxtempaddr, tH);
     EEPROM.write(mintempaddr, tL);
@@ -601,13 +604,29 @@ void demo(){
     delay(500);
     oled.clearDisplay();
     oled.drawBitmap(vent_on, 1024);
+    digitalWrite(vent, HIGH);
+    digitalWrite(ventSwitch, HIGH);
     delay(500);
+    digitalWrite(vent, LOW);
+    digitalWrite(ventSwitch, LOW);
     oled.clearDisplay();
     oled.drawBitmap(heater_on, 1024);
+    digitalWrite(heater, HIGH);
+    digitalWrite(heaterSwitch, HIGH);
     delay(500);
+    digitalWrite(heater, LOW);
+    digitalWrite(heaterSwitch, LOW);
     oled.clearDisplay();
     oled.drawBitmap(heatVent_on, 1024);
+    digitalWrite(heater, HIGH);
+    digitalWrite(heaterSwitch, HIGH);
+    digitalWrite(vent, HIGH);
+    digitalWrite(ventSwitch, HIGH);
     delay(500);
+    digitalWrite(vent, LOW);
+    digitalWrite(ventSwitch, LOW);
+    digitalWrite(heater, LOW);
+    digitalWrite(heaterSwitch, LOW);
     oled.clearDisplay();
     oled.drawBitmap(sending, 1024);
     delay(500);
@@ -1046,7 +1065,9 @@ void readSensor()
 
 void receiveEvent(int howMany)
 {
-  onBattery = Wire.read();       // recibe el último byte como número
+  if(Wire.available()){
+    onBattery = Wire.read(); 
+  }
   sendData = true;
 }
 
