@@ -1,5 +1,14 @@
 #define INTERRUPT 0
-
+#define DEBUG 0
+#if DEBUG
+  #define debug(x) Serial.print(x)
+  #define debugln(x) Serial.println(x)
+  #define beginSerial() Serial.begin(9600)
+#else
+  #define debug(x)
+  #define debugln(x)
+  #define beginSerial()
+#endif
 #include "DHT.h"
 #include <SPI.h>
 #include <Wire.h>
@@ -519,8 +528,7 @@ void setup()
   pinMode(heaterSwitch, OUTPUT);
   pinMode(ventSwitch, OUTPUT);
 
-  Serial.begin(9600);
-  //espSerial.begin(9600);
+  beginSerial();
   dht.setup(DHT11Pin);
   Wire.begin(1);  
   Wire.onReceive(receiveEvent);
@@ -581,7 +589,7 @@ void demo(){
     byte h = humDHT+10;
     byte tH = tempDHT+10;
     byte tL = tempDHT-10;
-    Serial.println(tH);
+    debugln(tH);
     EEPROM.write(maxtempaddr, tH);
     EEPROM.write(mintempaddr, tL);
     EEPROM.write(maxhumaddr, h);
@@ -866,8 +874,6 @@ void drawFlooding(void){
 int processData()
 {
     readSensor();
-    String poruka, poruka2 = "";
-    String str = "";
     bool vlaga = false;
     bool underWater = !digitalRead(poplava);
     int imgToShow = 0;
@@ -877,11 +883,11 @@ int processData()
       if (digitalRead(heater)==0)
         {
           digitalWrite(heater, HIGH);
-          Serial.println("HEATON");
+          debugln("HEATON");
         }
       if (digitalRead(vent)==0){
           digitalWrite(vent,HIGH);  
-          Serial.println("VENTON");
+          debugln("VENTON");
         }
         imgToShow = 5;
         vlaga = true;
@@ -897,7 +903,7 @@ int processData()
         if (digitalRead(heater)==0)
         {
           digitalWrite(heater, HIGH);
-          Serial.println("HEATON");
+          debugln("HEATON");
         }
     }else
     if (tempDHT >= mintemp && !vlaga)
@@ -906,7 +912,7 @@ int processData()
       if (digitalRead(heater) == 1)
       {
           digitalWrite(heater, LOW);
-          Serial.println("HEATOFF");  
+          debugln("HEATOFF");  
       }
     }
     if (tempDHT > maxtemp && !vlaga)
@@ -914,7 +920,7 @@ int processData()
         imgToShow = 2;
         if (digitalRead(vent)==0){
           digitalWrite(vent,HIGH);  
-          Serial.println("VENTON");
+          debugln("VENTON");
         }
     }else
     if (tempDHT <= maxtemp && !vlaga)
@@ -924,7 +930,7 @@ int processData()
       }
         if (digitalRead(vent)==1){
         digitalWrite(vent,LOW);  
-        Serial.println("VENTOFF");
+        debugln("VENTOFF");
         }
     }
     if(onBattery){
@@ -935,13 +941,13 @@ int processData()
       digitalWrite(heater, LOW);
       digitalWrite(vent, LOW);
     }
-    Serial.print("H: ");
-    Serial.print(humDHT);
-    Serial.print("% ");
-    Serial.print(" T: ");
-    Serial.print(tempDHT);
-    Serial.println("C");
-    Serial.println(String("VentStatus: ")+String(digitalRead(vent)));
+    debug("H: ");
+    debug(humDHT);
+    debug("% ");
+    debug(" T: ");
+    debug(tempDHT);
+    debugln("C");
+    debugln(String("VentStatus: ")+String(digitalRead(vent)));
     if(sendData){
       byte toSend[6] = {digitalRead(heater), digitalRead(vent), underWater, tempDHT, humDHT, sendData};
       Wire.beginTransmission(0);
