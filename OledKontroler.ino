@@ -51,8 +51,8 @@ byte mintemp = EEPROM.read(mintempaddr);
 byte maxhum = EEPROM.read(maxhumaddr);
 byte setByAmount = EEPROM.read(setByAmountAddr);
 
-const byte PROGMEM heaterSwitch = 4;
-const byte PROGMEM ventSwitch = 3;
+const byte PROGMEM heaterSwitch = 7;
+const byte PROGMEM ventSwitch = 8;
 const byte PROGMEM heater = 6;
 const byte PROGMEM vent = 5;
 const byte PROGMEM poplava = A0;
