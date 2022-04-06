@@ -16,6 +16,7 @@
 #include <Adafruit_SSD1306.h>
 #include <ACROBOTIC_SSD1306.h>
 #include <EEPROM.h>
+#include <I2CAddress.h>
 
 #define DHT11Pin 2
 DHT dht;
@@ -820,7 +821,7 @@ void setup()
 
   beginSerial();
   dht.setup(DHT11Pin);
-  Wire.begin(1);  
+  Wire.begin(I2CAddress::Interface);  
   Wire.onReceive(receiveEvent);
   oled.init(); // Initialze SSD1306 OLED display
   oled.sendCommand(0xA1);            //SEGREMAP   Mirror screen horizontally (A0)
@@ -1360,9 +1361,9 @@ int processData()
     debugln("C");
     debugln(String("VentStatus: ")+String(digitalRead(vent)));
     if(sendData){
-      byte toSend[6] = {digitalRead(heater), digitalRead(vent), underWater, tempDHT, humDHT, sendData};
-      Wire.beginTransmission(0);
-      for(int i = 0; i < 6;i++){
+      byte toSend[7] = {I2CAddress::Interface, digitalRead(heater), digitalRead(vent), underWater, tempDHT, humDHT, sendData};
+      Wire.beginTransmission(I2CAddress::Controller);
+      for(int i = 0; i < 7;i++){
         Wire.write(toSend[i]);
       }
       Wire.endTransmission();
@@ -1482,9 +1483,13 @@ bool readSensor()
 void receiveEvent(int howMany)
 {
   if(Wire.available()){
-    onBattery = Wire.read(); 
+    switch(Wire.read()){
+      case I2CAddress::Controller:
+        onBattery = Wire.read();
+        sendData = true;
+      break;
+    }
   }
-  sendData = true;
 }
 
  
