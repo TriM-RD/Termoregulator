@@ -16,7 +16,7 @@
 #include <Adafruit_SSD1306.h>
 #include <ACROBOTIC_SSD1306.h>
 #include <EEPROM.h>
-#include <SPI.h>
+
 #define DHT11Pin 2
 DHT dht;
 int counter = 0;
@@ -43,6 +43,8 @@ const byte PROGMEM maxtempaddr = 0;
 const byte PROGMEM mintempaddr = 1;
 const byte PROGMEM maxhumaddr = 2;
 const byte PROGMEM setByAmountAddr = 3;
+const byte PROGMEM heaterSetting = 4;
+const byte PROGMEM coolerSetting = 5;
 byte buttonState = 0;
 char cstr[16];
 
@@ -56,6 +58,9 @@ const byte PROGMEM ventSwitch = 8;
 const byte PROGMEM heater = 6;
 const byte PROGMEM vent = 5;
 const byte PROGMEM poplava = A0;
+
+bool heaterManual = false;
+bool coolerManual = false;
 
 static const unsigned char PROGMEM heater_on[] =
     {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -807,6 +812,11 @@ void setup()
   pinMode(heaterSwitch, OUTPUT);
   pinMode(ventSwitch, OUTPUT);
   EEPROM.write(setByAmountAddr, 10);
+  maxtemp = EEPROM.read(maxtempaddr);
+  mintemp = EEPROM.read(mintempaddr);
+  maxhum = EEPROM.read(maxhumaddr);
+  heaterManual = EEPROM.read(heaterSetting);
+  coolerManual = EEPROM.read(coolerSetting);
 
   beginSerial();
   dht.setup(DHT11Pin);
@@ -874,9 +884,13 @@ void demo(){
     EEPROM.write(maxtempaddr, tH);
     EEPROM.write(mintempaddr, tL);
     EEPROM.write(maxhumaddr, h);
+    EEPROM.write(heaterSetting, false);
+    EEPROM.write(coolerSetting, false);
     maxtemp = EEPROM.read(maxtempaddr);
     mintemp = EEPROM.read(mintempaddr);
     maxhum = EEPROM.read(maxhumaddr);
+    heaterManual = EEPROM.read(heaterSetting);
+    coolerManual = EEPROM.read(coolerSetting);
     oled.clearDisplay();              // Clear screen
     oled.drawBitmap(nothing, 1024);
     delay(500);
@@ -934,10 +948,10 @@ void demo(){
 void testMenu(){
   bool drawn = false;
   int countTime = 0;
-  while(MenuState < 5){
+  while(MenuState < 6){
     countTime++;
     if(countTime >= 500){
-      MenuState = 6;   
+      MenuState = 7;   
     }else{
       delay(10);
       }
@@ -965,6 +979,43 @@ void testMenu(){
           }
       }
       if (MenuState == 2)
+      {
+        if(drawn == false){
+          oled.clearDisplay();
+          oled.setTextXY(0,0); 
+          oled.putString("Manual Mode:");
+          oled.setTextXY(1,0); 
+          oled.putString("Leave on Off for self regulation");
+          oled.setTextXY(4,0); 
+          heaterManual?oled.putString("Heater: On"):oled.putString("Heater: Off");
+          oled.setTextXY(5,0); 
+          coolerManual?oled.putString("Cooler: On"):oled.putString("Cooler: Off");
+          drawn = true;
+          }
+          if (digitalRead(buttonRightPin) == 1){
+            delay(200);
+            heaterManual = !heaterManual;
+            if(heaterManual){
+              oled.setTextXY(4,0); 
+              oled.putString("Heater: On ");
+            }else{
+              oled.setTextXY(4,0); 
+              oled.putString("Heater: Off");
+            }
+          }
+          if (digitalRead(buttonLeftPin) == 1){
+            delay(200);
+            coolerManual = !coolerManual;
+            if(coolerManual){
+              oled.setTextXY(5,0); 
+              oled.putString("Cooler: On ");
+            }else{
+              oled.setTextXY(5,0); 
+              oled.putString("Cooler: Off");
+            }
+          }
+      }
+      if (MenuState == 3)
         {
           if(maxtemp > 50 || maxtemp < 0){
             maxtemp = 25;
@@ -1012,13 +1063,12 @@ void testMenu(){
             oled.putString(itoa(maxtemp, cstr, 10));
             }
         }
-        if (MenuState == 3)
+        if (MenuState == 4)
         {
           if(mintemp > 40 || mintemp < 0){
             mintemp = 25;
           }
           if(drawn == false){
-            EEPROM.write(maxtempaddr, maxtemp);
             oled.clearDisplay();                          // Start at top-left corner
             oled.setTextXY(0,0);
             oled.putString("MIN.TEMP:");
@@ -1060,13 +1110,12 @@ void testMenu(){
             oled.putString(itoa(mintemp, cstr, 10));
             }
         }
-        if (MenuState == 4)
+        if (MenuState == 5)
         {
           if(maxhum > 99 || maxhum < 0){
             maxhum = 50;
           }
           if(drawn == false){
-            EEPROM.write(mintempaddr, mintemp);
             oled.clearDisplay();
             oled.setTextXY(0,0);
             oled.putString("MAX. HUM:");
@@ -1105,10 +1154,14 @@ void testMenu(){
             oled.putString(itoa(maxhum, cstr, 10));
             }
         }
-        if (MenuState == 5)
+        if (MenuState == 6)
         {
           if(drawn == false){
             EEPROM.write(maxhumaddr, maxhum);
+            EEPROM.write(mintempaddr, mintemp);
+            EEPROM.write(maxtempaddr, maxtemp);
+            EEPROM.write(heaterSetting, heaterManual);
+            EEPROM.write(coolerSetting, coolerManual);
             drawn = true;
           }
           oled.clearDisplay();
@@ -1313,17 +1366,17 @@ int processData()
         Wire.write(toSend[i]);
       }
       Wire.endTransmission();
-      imgToShow = 3;
+      // imgToShow = 3;
       sendData = false;
     }
-    if(digitalRead(heater) && !underWater){
+    if((digitalRead(heater) || heaterManual) && !underWater){
       countHeaterStatus++;
       digitalWrite(heaterSwitch, HIGH);
     }else{
       countHeaterStatus++;
       digitalWrite(heaterSwitch, LOW);
     }
-    if(digitalRead(vent) && !underWater){
+    if((digitalRead(vent) || coolerManual) && !underWater){
       countVentStatus++;
       digitalWrite(ventSwitch, HIGH);
     }else{
