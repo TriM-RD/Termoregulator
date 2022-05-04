@@ -1,5 +1,5 @@
 #define INTERRUPT 0
-#define DEBUG 0
+#define DEBUG 1
 #if DEBUG
   #define debug(x) Serial.print(x)
   #define debugln(x) Serial.println(x)
@@ -17,12 +17,16 @@
 #include <ACROBOTIC_SSD1306.h>
 #include <EEPROM.h>
 #include <I2CAddress.h>
+#include "LowPower.h"
 
 #define DHT11Pin 2
 DHT dht;
 int counter = 0;
 bool sendData = false;
-bool onBattery = false;
+bool onBattery = true;
+
+const byte PROGMEM wakeUpPin = A5;
+
 const byte PROGMEM buttonOkPin = A2; 
 const byte PROGMEM buttonLeftPin = A1; 
 const byte PROGMEM buttonRightPin = A3; 
@@ -804,6 +808,15 @@ byte y = 0;
 bool statusChanged = true;
 void setup()
 {
+  //Watchdog
+  /*ADCSRA = 0;
+  PRR = //(1 << PRTWI) |
+        (1 << PRTIM2) |
+        (1 << PRTIM1) |
+        (1 << PRSPI) |
+        //(1 << PRUSART0) |
+        (1 << PRADC);*/
+  //Watchdog End
   pinMode(buttonOkPin, INPUT);
   pinMode(buttonLeftPin, INPUT);
   pinMode(buttonRightPin, INPUT);
@@ -828,6 +841,8 @@ void setup()
   oled.sendCommand(0xC8);            //COMSCANDEC Rotate screen vertically (C0)
   oled.sendCommand(0xDA);            //0xDA
   oled.sendCommand(0x12);            //COMSCANDEC
+
+  debugln("Working");
 }
 
 void loop()
@@ -844,34 +859,45 @@ void standBy(){
   int countTime = 0;
   MenuState = 0;
   while(MenuState == 0 ){
-    countTime++;
-    buttonState = digitalRead(buttonOkPin);
-    if(drawn == false || oldImgToShow != imgToShow){
+    if(onBattery){
+      debugln("OnBattery");
+      delay(2000);
+      //pinMode(wakeUpPin, INPUT_PULLUP);
+      pinMode(buttonOkPin, INPUT);
+      //attachInterrupt(wakeUpPin, onWakeUp, CHANGE);
+      attachInterrupt(buttonOkPin, onButtonWakeUp, CHANGE);
       oled.clearDisplay();
-      draw(imgToShow);
-      drawn = true;
-      oldImgToShow = imgToShow;
-      delay(200);
-    }
-    if (buttonState == 1)
-        {
-            delay(100);
-            testMenu();
-            MenuState = 0;
-            drawn = false;
-        }else if(countTime >= 100){
-          countTime = 0;
-          imgToShow = processData();
-        }else{
-          delay(10);
-        }
-      if(digitalRead(buttonRightPin) && digitalRead(buttonLeftPin))
-      {
-        demo();
-        drawn= false;
-        counter++;
-        delay(1000);
+      LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
+    }else{
+      countTime++;
+      buttonState = digitalRead(buttonOkPin);
+      if(drawn == false || oldImgToShow != imgToShow){
+        oled.clearDisplay();
+        draw(imgToShow);
+        drawn = true;
+        oldImgToShow = imgToShow;
+        delay(200);
       }
+      if (buttonState == 1)
+          {
+              delay(100);
+              testMenu();
+              MenuState = 0;
+              drawn = false;
+          }else if(countTime >= 100){
+            countTime = 0;
+            imgToShow = processData();
+          }else{
+            delay(10);
+          }
+        if(digitalRead(buttonRightPin) && digitalRead(buttonLeftPin))
+        {
+          demo();
+          drawn= false;
+          counter++;
+          delay(1000);
+        }
+      }  
   }
 }
 
@@ -1478,6 +1504,21 @@ bool readSensor()
   tempDHT = rawTemperature >> 8;
   dhtError = 0;
   return false;
+}
+
+void onWakeUp(){
+  debugln("here");
+  onBattery = false;
+  detachInterrupt(digitalPinToInterrupt(wakeUpPin));
+  detachInterrupt(digitalPinToInterrupt(buttonOkPin));
+  Wire.begin(I2CAddress::Interface);  
+  Wire.onReceive(receiveEvent);
+}
+
+void onButtonWakeUp() {
+  debugln("here2");
+  oled.clearDisplay();
+  draw(4);
 }
 
 void receiveEvent(int howMany)
