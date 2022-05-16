@@ -10,10 +10,7 @@
   #define beginSerial()
 #endif
 #include "DHT.h"
-#include <SPI.h>
 #include <Wire.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
 #include <ACROBOTIC_SSD1306.h>
 #include <EEPROM.h>
 #include <I2CAddress.h>
@@ -24,12 +21,23 @@ DHT dht;
 int counter = 0;
 bool sendData = false;
 bool onBattery = true;
-
-const byte PROGMEM wakeUpPin = A5;
+bool showBatteryStatus = false;
+bool interruptAtached = false;
+bool disableRelay = true;
+//bool noController = false;
 
 const byte PROGMEM buttonOkPin = A2; 
 const byte PROGMEM buttonLeftPin = A1; 
 const byte PROGMEM buttonRightPin = A3; 
+
+#define PCINT_PIN 16
+#define PCINT_MODE FALLING
+#define PCINT_FUNCTION onWakeUp
+
+#define PCINT_PIN_2 19
+#define PCINT_MODE_2 CHANGE
+#define PCINT_FUNCTION_2 onWakeUp
+
 
 byte dhtError = 0;
 byte countHeaterStatus = 0;
@@ -859,16 +867,38 @@ void standBy(){
   int countTime = 0;
   MenuState = 0;
   while(MenuState == 0 ){
-    if(onBattery){
-      debugln("OnBattery");
-      delay(2000);
-      //pinMode(wakeUpPin, INPUT_PULLUP);
-      pinMode(buttonOkPin, INPUT);
-      //attachInterrupt(wakeUpPin, onWakeUp, CHANGE);
-      attachInterrupt(buttonOkPin, onButtonWakeUp, CHANGE);
+    
+    if(showBatteryStatus){
       oled.clearDisplay();
+      imgToShow = 4;
+      draw(4);
+      oldImgToShow = imgToShow;
+      drawn = true;
+      delay(1000);
+      showBatteryStatus = false;
+    }else
+    if(onBattery && sendData == false){
+      interruptAtached = true;
+      showBatteryStatus = false;
+      pinMode(PCINT_PIN, INPUT);
+      pinMode(PCINT_PIN_2, INPUT);
+      attachPinChangeInterrupt();
+      oled.clearDisplay();
+      oled.sendCommand(0xAE);
       LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
-    }else{
+      /*if(noController){
+        pinMode(PCINT_PIN, INPUT);
+        attachPinChangeInterrupt();
+        LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
+        onBattery = false;
+      }else{
+        pinMode(PCINT_PIN, INPUT);
+        pinMode(PCINT_PIN_2, INPUT);
+        attachPinChangeInterrupt();
+        LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
+      }*/
+    }else{ 
+      showBatteryStatus = false;
       countTime++;
       buttonState = digitalRead(buttonOkPin);
       if(drawn == false || oldImgToShow != imgToShow){
@@ -897,11 +927,27 @@ void standBy(){
           counter++;
           delay(1000);
         }
-      }  
+        //if(noController){getBatteryInfo();}
+      }
+      if(interruptAtached){
+        detachPinChangeInterrupt();
+        interruptAtached = false;
+      }
   }
 }
 
+void getBatteryInfo(){
+  Wire.beginTransmission(I2CAddress::Ups);
+  Wire.write(I2CAddress::Interface);
+  if(Wire.endTransmission() != 0){
+    onBattery = true;
+  }else{
+    onBattery = false;
+  }  
+}
+
 void demo(){
+    sendData = true;
     readSensor();
     setByAmount = EEPROM.read(setByAmountAddr);
     byte h = humDHT+setByAmount;
@@ -966,8 +1012,6 @@ void demo(){
     delay(500);
     oled.clearDisplay();
     oled.drawBitmap(humidityHigh, 1024);
-    delay(500);
-    sendData = true;
     delay(500);
     processData();
 }
@@ -1371,9 +1415,9 @@ int processData()
         debugln("VENTOFF");
         }
     }
-    if(onBattery){
+    /*if(onBattery){
       imgToShow = 4;
-    }
+    }*/
     if(underWater){
       imgToShow = 6;
       digitalWrite(heater, LOW);
@@ -1386,7 +1430,7 @@ int processData()
     debug(tempDHT);
     debugln("C");
     debugln(String("VentStatus: ")+String(digitalRead(vent)));
-    if(sendData){
+    if(sendData /*&& !noController*/){
       byte toSend[7] = {I2CAddress::Interface, digitalRead(heater), digitalRead(vent), underWater, tempDHT, humDHT, sendData};
       Wire.beginTransmission(I2CAddress::Controller);
       for(int i = 0; i < 7;i++){
@@ -1396,14 +1440,14 @@ int processData()
       // imgToShow = 3;
       sendData = false;
     }
-    if((digitalRead(heater) || heaterManual) && !underWater){
+    if(((digitalRead(heater) || heaterManual) && !underWater && !disableRelay) /*|| (noController && !underWater)*/){
       countHeaterStatus++;
       digitalWrite(heaterSwitch, HIGH);
     }else{
       countHeaterStatus++;
       digitalWrite(heaterSwitch, LOW);
     }
-    if((digitalRead(vent) || coolerManual) && !underWater){
+    if(((digitalRead(vent) || coolerManual) && !underWater && !disableRelay) /*|| (noController && !underWater)*/){
       countVentStatus++;
       digitalWrite(ventSwitch, HIGH);
     }else{
@@ -1507,19 +1551,15 @@ bool readSensor()
 }
 
 void onWakeUp(){
-  debugln("here");
+  detachPinChangeInterrupt_2();
+  showBatteryStatus = true;
   onBattery = false;
-  detachInterrupt(digitalPinToInterrupt(wakeUpPin));
-  detachInterrupt(digitalPinToInterrupt(buttonOkPin));
-  Wire.begin(I2CAddress::Interface);  
-  Wire.onReceive(receiveEvent);
 }
 
-void onButtonWakeUp() {
-  debugln("here2");
-  oled.clearDisplay();
-  draw(4);
-}
+/*void onButtonWakeUp() {
+  showBatteryStatus = true;
+  onWakeUp();
+}*/
 
 void receiveEvent(int howMany)
 {
@@ -1527,10 +1567,196 @@ void receiveEvent(int howMany)
     switch(Wire.read()){
       case I2CAddress::Controller:
         onBattery = Wire.read();
+        disableRelay = onBattery;
         sendData = true;
-      break;
+        //noController = false;
+        break;
+      /*case I2CAddress::Ups:
+        onBattery = Wire.read();
+        sendData = false;
+        noController = true;
+        break;*/
     }
   }
+}
+
+//================================================================================
+// PCINT A2 Definitions
+//================================================================================
+
+#define PCMSK *digitalPinToPCMSK(PCINT_PIN)
+#define PCINT digitalPinToPCMSKbit(PCINT_PIN)
+#define PCIE  digitalPinToPCICRbit(PCINT_PIN)
+#define PCPIN *portInputRegister(digitalPinToPort(PCINT_PIN))
+
+#if (PCIE == 0)
+#define PCINT_vect PCINT0_vect
+#elif (PCIE == 1)
+#define PCINT_vect PCINT1_vect
+#elif (PCIE == 2)
+#define PCINT_vect PCINT2_vect
+#else
+#error This board doesnt support PCINT ?
+#endif
+
+volatile uint8_t oldPort = 0x00;
+
+/*void attachPinChangeInterrupt(void) {
+  // update the old state to the actual state
+  oldPort = PCPIN;
+
+  // pin change mask registers decide which pins are enabled as triggers
+  PCMSK |= (1 << PCINT);
+
+  // PCICR: Pin Change Interrupt Control Register - enables interrupt vectors
+  PCICR |= (1 << PCIE);
+}
+
+void detachPinChangeInterrupt(void) {
+  // disable the mask.
+  PCMSK &= ~(1 << PCINT);
+
+  // if that's the last one, disable the interrupt.
+  if (PCMSK == 0)
+    PCICR &= ~(0x01 << PCIE);
+}*/
+
+/*ISR(PCINT_vect) {
+  // get the new and old pin states for port
+  uint8_t newPort = PCPIN;
+
+  // compare with the old value to detect a rising or falling
+  uint8_t change = newPort ^ oldPort;
+
+  // check which pins are triggered, compared with the settings
+  uint8_t trigger = 0x00;
+#if (PCINT_MODE == RISING) || (PCINT_MODE == CHANGE)
+  uint8_t rising = change & newPort;
+  trigger |= (rising & (1 << PCINT));
+#endif
+#if (PCINT_MODE == FALLING) || (PCINT_MODE == CHANGE)
+  uint8_t falling = change & oldPort;
+  trigger |= (falling & (1 << PCINT));
+#endif
+
+  // save the new state for next comparison
+  oldPort = newPort;
+
+  // if our needed pin has changed, call the IRL interrupt function
+  if (trigger & (1 << PCINT))
+    PCINT_FUNCTION();
+}*/
+
+//================================================================================
+// PCINT A5 Definitions
+//================================================================================
+
+#define PCMSK_2 *digitalPinToPCMSK(PCINT_PIN_2)
+#define PCINT_2 digitalPinToPCMSKbit(PCINT_PIN_2)
+#define PCIE_2  digitalPinToPCICRbit(PCINT_PIN_2)
+#define PCPIN_2 *portInputRegister(digitalPinToPort(PCINT_PIN_2))
+
+/*#if (PCIE_2 == 0)
+#define PCINT_vect_2 PCINT0_vect
+#elif (PCIE_2 == 1)
+#define PCINT_vect_2 PCINT1_vect
+#elif (PCIE_2 == 2)
+#define PCINT_vect_2 PCINT2_vect
+#else
+#error This board doesnt support PCINT ?
+#endif*/
+
+volatile uint8_t oldPort_2 = 0x00;
+
+void attachPinChangeInterrupt(void) {
+
+  // update the old state to the actual state
+  oldPort = PCPIN;
+
+  // pin change mask registers decide which pins are enabled as triggers
+  PCMSK |= (1 << PCINT);
+
+  // PCICR: Pin Change Interrupt Control Register - enables interrupt vectors
+  PCICR |= (1 << PCIE);
+  // update the old state to the actual state
+  oldPort_2 = PCPIN_2;
+
+  // pin change mask registers decide which pins are enabled as triggers
+  PCMSK_2 |= (1 << PCINT_2);
+
+  // PCICR: Pin Change Interrupt Control Register - enables interrupt vectors
+  PCICR |= (1 << PCIE_2);
+}
+
+void detachPinChangeInterrupt(void) {
+  // disable the mask.
+  PCMSK &= ~(1 << PCINT);
+
+  // if that's the last one, disable the interrupt.
+  if (PCMSK == 0)
+    PCICR &= ~(0x01 << PCIE);
+}
+
+void detachPinChangeInterrupt_2(void) {
+  // disable the mask.
+  PCMSK_2 &= ~(1 << PCINT_2);
+
+  // if that's the last one, disable the interrupt.
+  if (PCMSK_2 == 0)
+    PCICR &= ~(0x01 << PCIE_2);
+}
+
+ISR(PCINT_vect) {
+    // get the new and old pin states for port
+  uint8_t newPort = PCPIN;
+
+  // compare with the old value to detect a rising or falling
+  uint8_t change = newPort ^ oldPort;
+
+  // check which pins are triggered, compared with the settings
+  uint8_t trigger = 0x00;
+#if (PCINT_MODE == RISING) || (PCINT_MODE == CHANGE)
+  uint8_t rising = change & newPort;
+  trigger |= (rising & (1 << PCINT));
+#endif
+#if (PCINT_MODE == FALLING) || (PCINT_MODE == CHANGE)
+  uint8_t falling = change & oldPort;
+  trigger |= (falling & (1 << PCINT));
+#endif
+
+  // save the new state for next comparison
+  oldPort = newPort;
+
+  // if our needed pin has changed, call the IRL interrupt function
+  if (trigger & (1 << PCINT))
+    PCINT_FUNCTION();
+  
+    
+    //////////////////////////
+  // get the new and old pin states for port
+   newPort = PCPIN_2;
+
+  // compare with the old value to detect a rising or falling
+   change = newPort ^ oldPort_2;
+
+  // check which pins are triggered, compared with the settings
+   trigger = 0x00;
+#if (PCINT_MODE_2 == RISING) || (PCINT_MODE_2 == CHANGE)
+  uint8_t rising = change & newPort;
+  trigger |= (rising & (1 << PCINT_2));
+#endif
+#if (PCINT_MODE_2 == FALLING) || (PCINT_MODE_2 == CHANGE)
+   falling = change & oldPort_2;
+  trigger |= (falling & (1 << PCINT_2));
+#endif
+
+  // save the new state for next comparison
+  oldPort_2 = newPort;
+
+  // if our needed pin has changed, call the IRL interrupt function
+  if (trigger & (1 << PCINT_2))
+    PCINT_FUNCTION_2();
+  
 }
 
  
