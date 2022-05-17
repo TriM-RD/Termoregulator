@@ -24,7 +24,7 @@ bool onBattery = true;
 bool showBatteryStatus = false;
 bool interruptAtached = false;
 bool disableRelay = true;
-//bool noController = false;
+bool noController = true;
 
 const byte PROGMEM buttonOkPin = A2; 
 const byte PROGMEM buttonLeftPin = A1; 
@@ -880,23 +880,23 @@ void standBy(){
     if(onBattery && sendData == false){
       interruptAtached = true;
       showBatteryStatus = false;
-      pinMode(PCINT_PIN, INPUT);
-      pinMode(PCINT_PIN_2, INPUT);
-      attachPinChangeInterrupt();
-      oled.clearDisplay();
-      oled.sendCommand(0xAE);
-      LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
-      /*if(noController){
+      if(noController){
+        onBattery = false;
         pinMode(PCINT_PIN, INPUT);
         attachPinChangeInterrupt();
+        oled.clearDisplay();
+        oled.sendCommand(0xAE);
         LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
-        onBattery = false;
+        countTime+=50;
       }else{
         pinMode(PCINT_PIN, INPUT);
         pinMode(PCINT_PIN_2, INPUT);
         attachPinChangeInterrupt();
+        attachPinChangeInterrupt_2();
+        oled.clearDisplay();
+        oled.sendCommand(0xAE);
         LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
-      }*/
+      }
     }else{ 
       showBatteryStatus = false;
       countTime++;
@@ -909,17 +909,17 @@ void standBy(){
         delay(200);
       }
       if (buttonState == 1)
-          {
-              delay(100);
-              testMenu();
-              MenuState = 0;
-              drawn = false;
-          }else if(countTime >= 100){
-            countTime = 0;
-            imgToShow = processData();
-          }else{
-            delay(10);
-          }
+        {
+          delay(100);
+          testMenu();
+          MenuState = 0;
+          drawn = false;
+        }else if(countTime >= 100){
+          countTime = 0;
+          imgToShow = processData();
+        }else{
+          delay(10);
+        }
         if(digitalRead(buttonRightPin) && digitalRead(buttonLeftPin))
         {
           demo();
@@ -927,7 +927,7 @@ void standBy(){
           counter++;
           delay(1000);
         }
-        //if(noController){getBatteryInfo();}
+        if(noController){getBatteryInfo();}
       }
       if(interruptAtached){
         detachPinChangeInterrupt();
@@ -1430,7 +1430,7 @@ int processData()
     debug(tempDHT);
     debugln("C");
     debugln(String("VentStatus: ")+String(digitalRead(vent)));
-    if(sendData /*&& !noController*/){
+    if(sendData && !noController){
       byte toSend[7] = {I2CAddress::Interface, digitalRead(heater), digitalRead(vent), underWater, tempDHT, humDHT, sendData};
       Wire.beginTransmission(I2CAddress::Controller);
       for(int i = 0; i < 7;i++){
@@ -1440,14 +1440,14 @@ int processData()
       // imgToShow = 3;
       sendData = false;
     }
-    if(((digitalRead(heater) || heaterManual) && !underWater && !disableRelay) /*|| (noController && !underWater)*/){
+    if(((digitalRead(heater) || heaterManual) && !underWater && !disableRelay) || ((digitalRead(heater) || heaterManual)&& noController && !underWater)){
       countHeaterStatus++;
       digitalWrite(heaterSwitch, HIGH);
     }else{
       countHeaterStatus++;
       digitalWrite(heaterSwitch, LOW);
     }
-    if(((digitalRead(vent) || coolerManual) && !underWater && !disableRelay) /*|| (noController && !underWater)*/){
+    if(((digitalRead(vent) || coolerManual) && !underWater && !disableRelay) || ((digitalRead(vent) || coolerManual) && noController && !underWater)){
       countVentStatus++;
       digitalWrite(ventSwitch, HIGH);
     }else{
@@ -1551,8 +1551,10 @@ bool readSensor()
 }
 
 void onWakeUp(){
-  detachPinChangeInterrupt_2();
-  showBatteryStatus = true;
+  if(!noController){
+    detachPinChangeInterrupt_2();  
+    showBatteryStatus = true;
+  }
   onBattery = false;
 }
 
@@ -1569,7 +1571,7 @@ void receiveEvent(int howMany)
         onBattery = Wire.read();
         disableRelay = onBattery;
         sendData = true;
-        //noController = false;
+        noController = false;
         break;
       /*case I2CAddress::Ups:
         onBattery = Wire.read();
@@ -1678,6 +1680,9 @@ void attachPinChangeInterrupt(void) {
 
   // PCICR: Pin Change Interrupt Control Register - enables interrupt vectors
   PCICR |= (1 << PCIE);
+}
+
+void attachPinChangeInterrupt_2(void) {
   // update the old state to the actual state
   oldPort_2 = PCPIN_2;
 
